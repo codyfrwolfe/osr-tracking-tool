@@ -6,29 +6,27 @@ providers    = ["python"]
 buildCommand = "pip install -r requirements.txt"
 
 [deploy]
-startCommand          = "gunicorn wsgi:app --workers=2 --worker-class=gevent --timeout=120 --log-level=info --bind=0.0.0.0:8080"
-healthcheckPath       = "/api/health"
-healthcheckTimeout    = 300
-restartPolicyType     = "on_failure"
+startCommand           = "gunicorn wsgi:app --workers=2 --worker-class=gevent --timeout=120 --log-level=info --bind=0.0.0.0:8080"
+healthcheckPath        = "/api/health"
+healthcheckTimeout     = 300
+restartPolicyType      = "on_failure"
 restartPolicyMaxRetries = 5
 
 [nixpacks]
 python_version = "3.11"
 
 [variables]
-FLASK_ENV            = "production"
-FLASK_DEBUG          = "false"
-SECRET_KEY           = "change-this-in-production-environment"
-PYTHONUNBUFFERED     = "1"
-
-# Memory optimization
-MALLOC_ARENA_MAX     = "2"
-PYTHONHASHSEED       = "random"
-
+FLASK_ENV           = "production"
+FLASK_DEBUG         = "false"
+SECRET_KEY          = "change-this-in-production-environment"
+PYTHONUNBUFFERED    = "1"
+# Memory tuning
+MALLOC_ARENA_MAX    = "2"
+PYTHONHASHSEED      = "random"
 # Gunicorn tuning
-WEB_CONCURRENCY      = "2"
-WORKER_CLASS         = "gevent"
-TIMEOUT              = "120"
-KEEP_ALIVE           = "5"
-MAX_REQUESTS         = "1000"
-MAX_REQUESTS_JITTER  = "50"
+WEB_CONCURRENCY     = "2"
+WORKER_CLASS        = "gevent"
+TIMEOUT             = "120"
+KEEP_ALIVE          = "5"
+MAX_REQUESTS        = "1000"
+MAX_REQUESTS_JITTER = "50"
