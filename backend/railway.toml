@@ -3,7 +3,7 @@
 [build]
 builder      = "nixpacks"
 providers    = ["python"]
-buildCommand = "pip install -r requirements.txt"
+buildCommand = "python3 -m pip install --upgrade pip && python3 -m pip install -r requirements.txt"
 
 [deploy]
 startCommand           = "gunicorn wsgi:app --workers=2 --worker-class=gevent --timeout=120 --log-level=info --bind=0.0.0.0:8080"
@@ -20,10 +20,8 @@ FLASK_ENV           = "production"
 FLASK_DEBUG         = "false"
 SECRET_KEY          = "change-this-in-production-environment"
 PYTHONUNBUFFERED    = "1"
-# Memory tuning
 MALLOC_ARENA_MAX    = "2"
 PYTHONHASHSEED      = "random"
-# Gunicorn tuning
 WEB_CONCURRENCY     = "2"
 WORKER_CLASS        = "gevent"
 TIMEOUT             = "120"
