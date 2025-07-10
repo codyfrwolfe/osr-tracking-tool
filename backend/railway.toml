@@ -5,7 +5,6 @@ builder   = "nixpacks"
 providers = ["python"]     # detect Python apps
 
 [deploy]
-startCommand            = "gunicorn main:app --workers=2 --worker-class=gevent --timeout=120 --bind=0.0.0.0:8080"
 healthcheckPath         = "/api/health"
 healthcheckTimeout      = 300
 restartPolicyType       = "on_failure"
@@ -25,3 +24,4 @@ FLASK_ENV        = "production"
 FLASK_DEBUG      = "false"
 SECRET_KEY       = "change-this-in-production-environment"
 PYTHONUNBUFFERED = "1"
+
