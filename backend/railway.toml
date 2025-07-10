@@ -1,13 +1,11 @@
 # backend/railway.toml
 
 [build]
-builder      = "nixpacks"
-providers    = ["python"]
-# Override the default pipeline and do a single pip install
-buildCommand = "python3 -m pip install --upgrade pip && python3 -m pip install -r requirements.txt"
+builder   = "nixpacks"
+providers = ["python"]     # detect Python apps
 
 [deploy]
-startCommand            = "gunicorn main:app --workers=2 --worker-class=gevent --timeout=120 --log-level=info --bind=0.0.0.0:8080"
+startCommand            = "gunicorn main:app --workers=2 --worker-class=gevent --timeout=120 --bind=0.0.0.0:8080"
 healthcheckPath         = "/api/health"
 healthcheckTimeout      = 300
 restartPolicyType       = "on_failure"
@@ -15,17 +13,15 @@ restartPolicyMaxRetries = 5
 
 [nixpacks]
 python_version = "3.11"
+# bring pip, setuptools & wheel into the store so the auto-pipeline venv steps won't fail
+packages = [
+  "python311Packages.pip",
+  "python311Packages.setuptools",
+  "python311Packages.wheel"
+]
 
 [variables]
-FLASK_ENV           = "production"
-FLASK_DEBUG         = "false"
-SECRET_KEY          = "change-this-in-production-environment"
-PYTHONUNBUFFERED    = "1"
-MALLOC_ARENA_MAX    = "2"
-PYTHONHASHSEED      = "random"
-WEB_CONCURRENCY     = "2"
-WORKER_CLASS        = "gevent"
-TIMEOUT             = "120"
-KEEP_ALIVE          = "5"
-MAX_REQUESTS        = "1000"
-MAX_REQUESTS_JITTER = "50"
+FLASK_ENV        = "production"
+FLASK_DEBUG      = "false"
+SECRET_KEY       = "change-this-in-production-environment"
+PYTHONUNBUFFERED = "1"
