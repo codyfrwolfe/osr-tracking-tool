@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Market 448 OSR Scoring Tool - Collaborative Assessment Platform
 
 A comprehensive Operating System Review (OSR) assessment tool designed for collaborative team evaluations across multiple stores in Market 448.
@@ -104,3 +105,7 @@ This project is proprietary software developed for Market 448 operations.
 
 For technical support or questions about deployment, refer to the deployment guide or contact the development team.
 
+=======
+# osr-tracking-tool
+Full-stack React &amp; Flask tool for Market 448 OSR Q2 assessment tracking
+>>>>>>> a539c3aee2eb24dd6b4b6ccfcdc6952553fdbeb5
