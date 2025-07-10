@@ -7,6 +7,7 @@ Optimized version with Gunicorn WSGI server, session handling, and memory optimi
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from flask_session import Session
+from flask.sessions import NullSessionInterface  ### Imported to disable session for health check
 import os
 import sys
 import logging
@@ -96,28 +97,36 @@ def create_app():
     @app.route('/api/health', methods=['GET'])
     def health_check():
         """Health check endpoint that returns proper JSON with memory usage info"""
-        # Get memory usage information
-        process = psutil.Process(os.getpid())
-        memory_info = process.memory_info()
-        memory_usage_mb = memory_info.rss / (1024 * 1024)  # Convert to MB
+        # === BEGIN SESSION DISABLE PATCH ===
+        original_si = app.session_interface  ### Save original session interface
+        app.session_interface = NullSessionInterface()  ### Disable session (avoids cookie errors)
         
-        # Get system memory information
-        system_memory = psutil.virtual_memory()
-        available_memory_mb = system_memory.available / (1024 * 1024)  # Convert to MB
-        
-        return jsonify({
-            'success': True,
-            'status': 'healthy',
-            'timestamp': datetime.utcnow().isoformat(),
-            'service': 'OSR Assessment API',
-            'version': '1.1.0',
-            'environment': os.environ.get('FLASK_ENV', 'production'),
-            'memory_usage': {
-                'process_memory_mb': round(memory_usage_mb, 2),
-                'available_memory_mb': round(available_memory_mb, 2),
-                'percent_used': round(system_memory.percent, 2)
-            }
-        })
+        try:
+            # Get memory usage information
+            process = psutil.Process(os.getpid())
+            memory_info = process.memory_info()
+            memory_usage_mb = memory_info.rss / (1024 * 1024)  # Convert to MB
+            
+            # Get system memory information
+            system_memory = psutil.virtual_memory()
+            available_memory_mb = system_memory.available / (1024 * 1024)  # Convert to MB
+            
+            return jsonify({
+                'success': True,
+                'status': 'healthy',
+                'timestamp': datetime.utcnow().isoformat(),
+                'service': 'OSR Assessment API',
+                'version': '1.1.0',
+                'environment': os.environ.get('FLASK_ENV', 'production'),
+                'memory_usage': {
+                    'process_memory_mb': round(memory_usage_mb, 2),
+                    'available_memory_mb': round(available_memory_mb, 2),
+                    'percent_used': round(system_memory.percent, 2)
+                }
+            }), 200
+        finally:
+            app.session_interface = original_si  ### Restore session for other endpoints
+        # === END SESSION DISABLE PATCH ===
     
     # Root endpoint
     @app.route('/', methods=['GET'])
@@ -172,7 +181,6 @@ def create_app():
             'message': f'The method {request.method} is not allowed for the requested URL.'
         }), 405
     
-    # Global error handler for all exceptions
     @app.errorhandler(Exception)
     def handle_exception(e):
         """Global error handler for all exceptions"""
@@ -278,4 +286,3 @@ if __name__ == '__main__':
                 debug=debug,
                 threaded=True
             )
-
