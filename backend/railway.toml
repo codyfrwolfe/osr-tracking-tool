@@ -3,6 +3,7 @@
 [build]
 builder      = "nixpacks"
 providers    = ["python"]
+# Override the default pipeline and do a single pip install
 buildCommand = "python3 -m pip install --upgrade pip && python3 -m pip install -r requirements.txt"
 
 [deploy]
