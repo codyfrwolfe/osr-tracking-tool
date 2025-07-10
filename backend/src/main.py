@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-OSR Assessment Tool - Flask Backend
+OSR Assessment Tool - Flask Backend - v1.0
 Optimized version with Gunicorn WSGI server, session handling, and memory optimization
 """
 
