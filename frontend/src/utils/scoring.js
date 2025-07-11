@@ -48,3 +48,4 @@ const safeObjectEntries = (obj) => {
     return [];
   }
   return Object.entries(obj);
+};
