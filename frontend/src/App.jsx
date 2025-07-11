@@ -218,6 +218,10 @@ function AppContent() {
     }
   };
 
+  const handleStoreSelect = (storeId) => {
+    navigate(`/sections/${storeId}`);
+  };
+
   return (
     <div className="App">
       <ErrorBoundary>
@@ -228,6 +232,7 @@ function AppContent() {
             element={
               <StoreSelection 
                 stores={STORES}
+                onStoreSelect={handleStoreSelect}
                 storeProgress={storeProgress}
                 isLoading={isLoading}
               />
