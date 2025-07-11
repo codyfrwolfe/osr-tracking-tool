@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Building2, CheckCircle, Clock, ArrowRight, RefreshCw, TrendingUp, Award } from 'lucide-react';
 import MovingClocksFooter from './MovingClocksFooter';
 import apiService from '../utils/apiService';
+import { safeObjectKeys, safeObjectValues, safeObjectEntries } from '../utils/safeObjectUtils';
 
 const StoreSelection = ({ 
   stores, 
@@ -16,7 +17,7 @@ const StoreSelection = ({
 
   // Load store progress on component mount
   useEffect(() => {
-    setLocalProgress(storeProgress);
+    setLocalProgress(storeProgress || {});
   }, [storeProgress]);
 
   const handleRefresh = async () => {
@@ -96,8 +97,8 @@ const StoreSelection = ({
         }
       }
 
-      // Check if there are any responses for this store
-      const hasResponses = Object.keys(responses).some(key => key.startsWith(`${storeId}-`));
+      // FIXED: Use safe object keys to prevent null/undefined errors
+      const hasResponses = safeObjectKeys(responses || {}).some(key => key.startsWith(`${storeId}-`));
       
       if (hasResponses) {
         return {
@@ -275,7 +276,7 @@ const StoreSelection = ({
                       <div className="mt-2 pt-2 border-t border-gray-50">
                         <div className="text-xs text-gray-500 mb-1">Section Progress:</div>
                         <div className="grid grid-cols-5 gap-1">
-                          {Object.entries(completionStatus.score.sectionScores).map(([sectionName, sectionData]) => (
+                          {safeObjectEntries(completionStatus.score.sectionScores).map(([sectionName, sectionData]) => (
                             <div
                               key={sectionName}
                               className={`h-2 rounded-full ${
@@ -298,31 +299,31 @@ const StoreSelection = ({
       </div>
 
       {/* Summary Statistics */}
-      {Object.keys(localProgress).length > 0 && (
+      {safeObjectKeys(localProgress).length > 0 && (
         <div className="mt-12 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-6 border border-blue-200">
           <h3 className="heading-tertiary mb-4 text-center">Assessment Overview</h3>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
             <div className="bg-white rounded-lg p-4 shadow-sm">
               <div className="text-2xl font-bold text-blue-600">
-                {Object.values(localProgress).filter(p => p.sections_completed > 0).length}
+                {safeObjectValues(localProgress).filter(p => p.sections_completed > 0).length}
               </div>
               <div className="text-sm text-gray-600">Stores Started</div>
             </div>
             <div className="bg-white rounded-lg p-4 shadow-sm">
               <div className="text-2xl font-bold text-green-600">
-                {Object.values(localProgress).filter(p => p.sections_completed === 5).length}
+                {safeObjectValues(localProgress).filter(p => p.sections_completed === 5).length}
               </div>
               <div className="text-sm text-gray-600">Stores Completed</div>
             </div>
             <div className="bg-white rounded-lg p-4 shadow-sm">
               <div className="text-2xl font-bold text-purple-600">
-                {Object.values(localProgress).reduce((sum, p) => sum + (p.sections_completed || 0), 0)}
+                {safeObjectValues(localProgress).reduce((sum, p) => sum + (p.sections_completed || 0), 0)}
               </div>
               <div className="text-sm text-gray-600">Total Sections</div>
             </div>
             <div className="bg-white rounded-lg p-4 shadow-sm">
               <div className="text-2xl font-bold text-orange-600">
-                {Math.round(Object.values(localProgress).reduce((sum, p) => sum + (p.overall_percentage || 0), 0) / Math.max(Object.keys(localProgress).length, 1))}%
+                {Math.round(safeObjectValues(localProgress).reduce((sum, p) => sum + (p.overall_percentage || 0), 0) / Math.max(safeObjectKeys(localProgress).length, 1))}%
               </div>
               <div className="text-sm text-gray-600">Average Progress</div>
             </div>

@@ -1,10 +1,12 @@
-// Enhanced API Service for OSR Assessment Tool
-// Addresses root API issues and prevents page refresh
+// FIXED API Service for OSR Assessment Tool
+// Ensures absolute URLs and proper error handling
 
-const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || 'https://osr-tracking-tool-production.up.railway.app';
+// CRITICAL: Ensure absolute URL with protocol
+const API_BASE_URL = 'https://osr-tracking-tool-production.up.railway.app';
 
 class ApiService {
   constructor() {
+    // Ensure the base URL is always absolute
     this.baseURL = API_BASE_URL;
     this.isBackendHealthy = false;
     this.lastHealthCheck = null;
@@ -15,47 +17,48 @@ class ApiService {
     
     console.log('API Service initialized with base URL:', this.baseURL);
     
+    // Validate URL format
+    if (!this.baseURL.startsWith('https://')) {
+      console.error('❌ API Base URL must start with https://');
+      throw new Error('Invalid API Base URL configuration');
+    }
+    
     // Check backend health on initialization
     this.checkBackendHealth();
   }
 
-  // ENHANCED: Comprehensive backend health check with retry
-  async checkBackendHealth(retries = 2) {
+  // Enhanced health check with better error handling
+  async checkBackendHealth(retries = 3) {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const healthUrl = `${this.baseURL}/api/health`;
+      console.log('🔍 Checking backend health at:', healthUrl);
       
-      const response = await fetch(`${this.baseURL}/api/health`, {
+      const response = await fetch(healthUrl, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json'
         },
-        signal: controller.signal
+        timeout: 5000
       });
 
-      clearTimeout(timeoutId);
-      const contentType = response.headers.get('content-type');
-      
-      if (response.ok && contentType && contentType.includes('application/json')) {
-        const data = await response.json();
-        this.isBackendHealthy = true;
-        this.lastHealthCheck = new Date();
-        console.log('✅ Backend is healthy:', data);
-        return true;
-      } else {
-        console.warn('⚠️ Backend returned non-JSON response for health check');
-        this.isBackendHealthy = false;
-        
-        // Retry if retries remaining
-        if (retries > 0) {
-          console.log(`Retrying health check (${retries} retries left)...`);
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          return this.checkBackendHealth(retries - 1);
-        }
-        
-        return false;
+      if (!response.ok) {
+        throw new Error(`Health check failed: ${response.status} ${response.statusText}`);
       }
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        console.warn('⚠️ Backend returned non-JSON response for health check');
+        throw new Error('Backend health check returned non-JSON response');
+      }
+
+      const healthData = await response.json();
+      console.log('✅ Backend health check passed:', healthData);
+      
+      this.isBackendHealthy = true;
+      this.lastHealthCheck = new Date();
+      return true;
+      
     } catch (error) {
       console.error('❌ Backend health check failed:', error);
       this.isBackendHealthy = false;
@@ -71,9 +74,16 @@ class ApiService {
     }
   }
 
-  // ENHANCED: Request method with caching, retries, and better error handling
+  // FIXED: Request method with absolute URL construction
   async makeRequest(endpoint, options = {}, useCache = false, retries = 1) {
+    // CRITICAL: Ensure absolute URL construction
     const url = `${this.baseURL}/api${endpoint}`;
+    
+    // Validate the constructed URL
+    if (!url.startsWith('https://')) {
+      console.error('❌ Constructed URL is not absolute:', url);
+      throw new Error('Invalid URL construction - must be absolute HTTPS URL');
+    }
     
     // Check cache if enabled
     if (useCache && options.method === 'GET') {
@@ -103,7 +113,9 @@ class ApiService {
       const timeoutId = setTimeout(() => controller.abort(), defaultOptions.timeout);
       
       const response = await fetch(url, {
-        ...defaultOptions,
+        method: defaultOptions.method || 'GET',
+        headers: defaultOptions.headers,
+        body: defaultOptions.body,
         signal: controller.signal
       });
       
@@ -144,8 +156,8 @@ class ApiService {
       this.lastHealthCheck = new Date();
       
       // Cache the response if it's a GET request
-      if (useCache && options.method === 'GET') {
-        const cacheKey = `${options.method}:${url}`;
+      if (useCache && (defaultOptions.method || 'GET') === 'GET') {
+        const cacheKey = `GET:${url}`;
         this.responseCache.set(cacheKey, {
           data,
           timestamp: Date.now()
@@ -153,411 +165,54 @@ class ApiService {
       }
       
       return data;
+      
     } catch (error) {
       console.error(`API Error for ${endpoint}:`, error);
+      this.isBackendHealthy = false;
       
-      // Retry if retries remaining
+      // Enhanced error messages
+      if (error.name === 'AbortError') {
+        throw new Error(`Request timeout after ${defaultOptions.timeout}ms`);
+      }
+      
+      if (error.message.includes('Failed to fetch')) {
+        throw new Error('Network error - check internet connection and backend availability');
+      }
+      
+      // Retry logic
       if (retries > 0) {
         console.log(`Retrying request (${retries} retries left)...`);
         await new Promise(resolve => setTimeout(resolve, 1000));
         return this.makeRequest(endpoint, options, useCache, retries - 1);
       }
       
-      this.isBackendHealthy = false;
-      
-      // Return structured error response instead of throwing
-      if (error.name === 'AbortError') {
-        return {
-          success: false,
-          error: 'Request timeout - backend may be slow or down',
-          errorType: 'timeout',
-          fallback: true
-        };
-      }
-      
-      if (error.message.includes('HTML error page')) {
-        return {
-          success: false,
-          error: 'Backend API endpoints not configured correctly',
-          errorType: 'configuration',
-          fallback: true
-        };
-      }
-      
-      if (error.message.includes('non-JSON response')) {
-        return {
-          success: false,
-          error: 'Backend returning HTML instead of JSON',
-          errorType: 'content_type',
-          fallback: true
-        };
-      }
-      
-      return {
-        success: false,
-        error: error.message || 'Unknown API error',
-        errorType: 'unknown',
-        fallback: true
-      };
+      throw error;
     }
   }
 
-  // ENHANCED: Save response with better error handling and no page refresh
-  async saveResponse(store, section, questionId, procedureIndex, response) {
-    // Validate inputs
-    if (!store || store === 'undefined' || !section || !questionId) {
-      console.error('Invalid parameters for saveResponse:', { store, section, questionId, procedureIndex });
-      return {
-        success: false,
-        error: 'Invalid parameters provided',
-        errorType: 'validation'
-      };
-    }
-
+  // Test connection with comprehensive diagnostics
+  async testConnection() {
+    console.log('🔍 Testing backend connection...');
+    
     try {
-      const payload = {
-        store: store,
-        section: section,
-        question_id: questionId,
-        procedure_index: procedureIndex,
-        response: response,
-        user_id: 'collaborative_user',
-        timestamp: new Date().toISOString()
-      };
-
-      console.log('Saving response:', payload);
-
-      // Clear cache for this store and section
-      this.clearCache(store, section);
-
-      const result = await this.makeRequest('/save_response', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      }, false, 2); // Use 2 retries for save operations
-
-      if (!result.success) {
-        if (result.errorType === 'configuration') {
-          console.warn('Backend API not configured - responses will be saved locally only');
-          return {
-            success: true,
-            message: 'Response saved locally (backend API not configured)',
-            localOnly: true
-          };
-        }
-        
-        if (result.errorType === 'timeout') {
-          console.warn('Backend timeout - responses will be saved locally only');
-          return {
-            success: true,
-            message: 'Response saved locally (backend timeout)',
-            localOnly: true
-          };
-        }
-        
-        console.error('API save failed:', result.error);
-        return {
-          success: true,
-          message: 'Response saved locally (backend unavailable)',
-          localOnly: true
-        };
+      // Test health endpoint
+      const healthResult = await this.checkBackendHealth();
+      
+      if (!healthResult) {
+        console.log('⚠️ Backend connection failed - running diagnostics...');
+        return await this.diagnoseBackend();
       }
-
-      console.log('Response saved successfully to backend:', result);
-      return result;
+      
+      console.log('✅ Backend connection successful');
+      return { success: true, message: 'Backend connection established' };
+      
     } catch (error) {
-      console.error('Error in saveResponse:', error);
-      return {
-        success: true,
-        message: 'Response saved locally (error occurred)',
-        localOnly: true,
-        error: error.message
-      };
-    }
-  }
-
-  // ENHANCED: Batch save responses for better performance
-  async batchSaveResponses(store, section, responses) {
-    if (!store || store === 'undefined' || !section || !responses) {
-      console.error('Invalid parameters for batchSaveResponses:', { store, section, responses });
-      return {
-        success: false,
-        error: 'Invalid parameters provided',
-        errorType: 'validation'
-      };
-    }
-
-    try {
-      const payload = {
-        store: store,
-        section: section,
-        responses: responses,
-        user_id: 'collaborative_user',
-        timestamp: new Date().toISOString()
-      };
-
-      console.log('Batch saving responses:', payload);
-
-      // Clear cache for this store and section
-      this.clearCache(store, section);
-
-      const result = await this.makeRequest('/batch_save_responses', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      }, false, 2); // Use 2 retries for batch save operations
-
-      if (!result.success) {
-        console.warn('Batch save failed, falling back to individual saves');
-        
-        // Fallback to individual saves
-        const individualResults = [];
-        for (const [responseKey, response] of Object.entries(responses)) {
-          const [questionId, procedureIndex] = responseKey.split('-');
-          const individualResult = await this.saveResponse(store, section, questionId, procedureIndex, response);
-          individualResults.push(individualResult);
-        }
-        
-        return {
-          success: true,
-          message: 'Responses saved individually (batch save failed)',
-          individualResults: individualResults,
-          localOnly: true
-        };
-      }
-
-      console.log('Batch save successful:', result);
-      return result;
-    } catch (error) {
-      console.error('Error in batchSaveResponses:', error);
-      return {
-        success: true,
-        message: 'Responses saved locally (batch save error)',
-        localOnly: true,
-        error: error.message
-      };
-    }
-  }
-
-  // ENHANCED: Get responses with caching and better error handling
-  async getResponses(store, section) {
-    if (!store || store === 'undefined' || !section) {
-      console.error('Invalid parameters for getResponses:', { store, section });
-      return {
-        success: true,
-        responses: {},
-        localOnly: true
-      };
-    }
-
-    try {
-      const result = await this.makeRequest(`/get_responses/${store}/${section}`, {}, true); // Use cache
-      
-      if (!result.success) {
-        console.warn('Failed to get responses from backend:', result.error);
-        return {
-          success: true,
-          responses: {},
-          localOnly: true
-        };
-      }
-      
-      if (result.success && result.responses) {
-        console.log(`Loaded responses for ${store}-${section}:`, result.responses);
-        return result;
-      } else {
-        return {
-          success: true,
-          responses: {},
-          localOnly: true
-        };
-      }
-    } catch (error) {
-      console.error('Error in getResponses:', error);
-      return {
-        success: true,
-        responses: {},
-        localOnly: true
-      };
-    }
-  }
-
-  // ENHANCED: Get store score with caching and better error handling
-  async getStoreScore(store) {
-    if (!store || store === 'undefined') {
-      console.error('Invalid store ID for getStoreScore:', store);
-      return {
-        success: true,
-        score: this.getDefaultStoreScore(),
-        localOnly: true
-      };
-    }
-
-    try {
-      const result = await this.makeRequest(`/get_store_score/${store}`, {}, true); // Use cache
-      
-      if (!result.success) {
-        console.warn('Failed to get store score from backend:', result.error);
-        return {
-          success: true,
-          score: this.getDefaultStoreScore(),
-          localOnly: true
-        };
-      }
-      
-      if (result.success && result.score) {
-        console.log(`Loaded store score for ${store}:`, result.score);
-        
-        const enhancedScore = {
-          overall_score: result.score.overall_score || 0,
-          overall_max_score: result.score.overall_max_score || 46,
-          overall_percentage: result.score.overall_percentage || 0,
-          overall_color: result.score.overall_color || 'red',
-          sections_completed: result.score.sections_completed || 0,
-          total_sections: result.score.total_sections || 5,
-          section_scores: result.score.section_scores || {},
-          last_updated: new Date().toISOString()
-        };
-        
-        return {
-          success: true,
-          score: enhancedScore,
-          localOnly: false
-        };
-      } else {
-        return {
-          success: true,
-          score: this.getDefaultStoreScore(),
-          localOnly: true
-        };
-      }
-    } catch (error) {
-      console.error('Error in getStoreScore:', error);
-      return {
-        success: true,
-        score: this.getDefaultStoreScore(),
-        localOnly: true
-      };
-    }
-  }
-
-  // Helper method to get default store score
-  getDefaultStoreScore() {
-    return {
-      overall_score: 0,
-      overall_max_score: 46,
-      overall_percentage: 0,
-      overall_color: 'red',
-      sections_completed: 0,
-      total_sections: 5,
-      section_scores: {},
-      last_updated: new Date().toISOString()
-    };
-  }
-
-  // ENHANCED: Get section score with caching
-  async getSectionScore(store, section) {
-    if (!store || store === 'undefined' || !section) {
-      console.error('Invalid parameters for getSectionScore:', { store, section });
-      return {
-        success: true,
-        score: this.getDefaultSectionScore(),
-        localOnly: true
-      };
-    }
-
-    try {
-      const result = await this.makeRequest(`/get_section_score/${store}/${section}`, {}, true); // Use cache
-      
-      if (!result.success) {
-        console.warn('Failed to get section score from backend:', result.error);
-        return {
-          success: true,
-          score: this.getDefaultSectionScore(),
-          localOnly: true
-        };
-      }
-      
-      if (result.success && result.score) {
-        console.log(`Loaded section score for ${store}-${section}:`, result.score);
-        return result;
-      } else {
-        return {
-          success: true,
-          score: this.getDefaultSectionScore(),
-          localOnly: true
-        };
-      }
-    } catch (error) {
-      console.error('Error in getSectionScore:', error);
-      return {
-        success: true,
-        score: this.getDefaultSectionScore(),
-        localOnly: true
-      };
-    }
-  }
-
-  // Helper method to get default section score
-  getDefaultSectionScore() {
-    return {
-      score: 0,
-      max_score: 10,
-      percentage: 0,
-      color: 'red',
-      questions_completed: 0,
-      total_questions: 5
-    };
-  }
-
-  // ENHANCED: Refresh scores after saving with cache clearing
-  async refreshScores(store, section = 'all') {
-    if (!store || store === 'undefined') {
-      console.error('Invalid store ID for refreshScores:', store);
-      return { success: false, error: 'Invalid store ID' };
-    }
-
-    try {
-      // Clear cache for this store and section
-      this.clearCache(store, section);
-
-      const result = await this.makeRequest(`/refresh_scores/${store}/${section}`, {
-        method: 'POST'
-      }, false, 2); // Use 2 retries for refresh operations
-      
-      if (result.success) {
-        console.log(`Refreshed scores for ${store}-${section}`);
-      } else {
-        console.warn('Failed to refresh scores:', result.error);
-      }
-      
-      return result;
-    } catch (error) {
-      console.error('Error refreshing scores:', error);
+      console.error('❌ Connection test failed:', error);
       return { success: false, error: error.message };
     }
   }
 
-  // Helper method to clear cache for a store and section
-  clearCache(store, section = null) {
-    const cacheKeys = [];
-    
-    // Get all cache keys for this store
-    for (const key of this.responseCache.keys()) {
-      if (key.includes(`/${store}/`)) {
-        if (!section || section === 'all' || key.includes(`/${store}/${section}`)) {
-          cacheKeys.push(key);
-        }
-      }
-    }
-    
-    // Clear matching cache entries
-    for (const key of cacheKeys) {
-      this.responseCache.delete(key);
-    }
-    
-    console.log(`Cleared ${cacheKeys.length} cache entries for store ${store}${section ? `, section ${section}` : ''}`);
-  }
-
-  // ENHANCED: Backend diagnostic method
+  // Comprehensive backend diagnostics
   async diagnoseBackend() {
     console.log('🔍 Running backend diagnostics...');
     
@@ -567,69 +222,55 @@ class ApiService {
       tests: {}
     };
 
-    // Test 1: Basic connectivity
+    // Test basic connectivity
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-      
-      const response = await fetch(this.baseURL, { 
-        method: 'HEAD', 
-        signal: controller.signal 
-      });
-      
-      clearTimeout(timeoutId);
-      
+      const response = await fetch(this.baseURL, { method: 'HEAD', timeout: 5000 });
       diagnostics.tests.connectivity = {
-        status: response.ok ? 'PASS' : 'FAIL',
-        httpStatus: response.status,
+        success: response.ok,
+        status: response.status,
         statusText: response.statusText
       };
     } catch (error) {
       diagnostics.tests.connectivity = {
-        status: 'FAIL',
+        success: false,
         error: error.message
       };
     }
 
-    // Test 2: Health endpoint
+    // Test health endpoint
     try {
-      const healthResult = await this.checkBackendHealth(0); // No retries for diagnostics
+      const healthResponse = await this.checkBackendHealth(1);
       diagnostics.tests.healthEndpoint = {
-        status: healthResult ? 'PASS' : 'FAIL',
-        healthy: this.isBackendHealthy
+        success: healthResponse,
+        message: healthResponse ? 'Health endpoint responding' : 'Health endpoint failed'
       };
     } catch (error) {
       diagnostics.tests.healthEndpoint = {
-        status: 'FAIL',
+        success: false,
         error: error.message
       };
     }
 
-    // Test 3: API endpoint structure
+    // Test specific API endpoints
     const testEndpoints = ['/api/health', '/api/get_store_score/test', '/api/get_responses/test/test'];
+    
     for (const endpoint of testEndpoints) {
+      const endpointKey = `endpoint_${endpoint.replace(/\//g, '_')}`;
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        
         const response = await fetch(`${this.baseURL}${endpoint}`, {
           method: 'GET',
           headers: { 'Accept': 'application/json' },
-          signal: controller.signal
+          timeout: 3000
         });
         
-        clearTimeout(timeoutId);
-        
-        const contentType = response.headers.get('content-type');
-        diagnostics.tests[`endpoint_${endpoint.replace(/[^a-zA-Z0-9]/g, '_')}`] = {
-          status: response.ok && contentType && contentType.includes('application/json') ? 'PASS' : 'FAIL',
-          httpStatus: response.status,
-          contentType: contentType,
-          isJson: contentType && contentType.includes('application/json')
+        diagnostics.tests[endpointKey] = {
+          success: response.ok,
+          status: response.status,
+          contentType: response.headers.get('content-type')
         };
       } catch (error) {
-        diagnostics.tests[`endpoint_${endpoint.replace(/[^a-zA-Z0-9]/g, '_')}`] = {
-          status: 'FAIL',
+        diagnostics.tests[endpointKey] = {
+          success: false,
           error: error.message
         };
       }
@@ -639,47 +280,83 @@ class ApiService {
     return diagnostics;
   }
 
-  // Health check endpoint
-  async healthCheck() {
-    return await this.checkBackendHealth();
-  }
-
-  // Test connection to backend
-  async testConnection() {
+  // API Methods
+  async getStoreScore(storeId) {
     try {
-      const isHealthy = await this.checkBackendHealth();
-      if (isHealthy) {
-        console.log('✅ Backend connection successful');
-        return true;
-      } else {
-        console.warn('⚠️ Backend connection failed - running diagnostics...');
-        await this.diagnoseBackend();
-        return false;
-      }
+      const data = await this.makeRequest(`/get_store_score/${storeId}`, {}, true);
+      return data;
     } catch (error) {
-      console.error('❌ Backend connection test failed:', error);
-      await this.diagnoseBackend();
-      return false;
+      console.error('Failed to get store score from backend:', error.message);
+      throw error;
     }
   }
 
-  // ENHANCED: Get backend status for UI display
-  getBackendStatus() {
-    return {
-      isHealthy: this.isBackendHealthy,
-      lastHealthCheck: this.lastHealthCheck,
-      baseURL: this.baseURL
-    };
+  async saveResponse(storeId, sectionId, questionId, procedureIndex, response) {
+    try {
+      const data = await this.makeRequest('/save_response', {
+        method: 'POST',
+        body: JSON.stringify({
+          store_id: storeId,
+          section_id: sectionId,
+          question_id: questionId,
+          procedure_index: procedureIndex,
+          response: response
+        })
+      });
+      return data;
+    } catch (error) {
+      console.error('Failed to save response to backend:', error.message);
+      throw error;
+    }
+  }
+
+  async getResponses(storeId, sectionId) {
+    try {
+      const data = await this.makeRequest(`/get_responses/${storeId}/${sectionId}`, {}, true);
+      return data;
+    } catch (error) {
+      console.error('Failed to get responses from backend:', error.message);
+      throw error;
+    }
+  }
+
+  async getSectionScore(storeId, sectionId) {
+    try {
+      const data = await this.makeRequest(`/get_section_score/${storeId}/${sectionId}`, {}, true);
+      return data;
+    } catch (error) {
+      console.error('Failed to get section score from backend:', error.message);
+      throw error;
+    }
+  }
+
+  async refreshScores(storeId, sectionId) {
+    try {
+      const data = await this.makeRequest(`/refresh_scores/${storeId}/${sectionId}`, {
+        method: 'POST'
+      });
+      return data;
+    } catch (error) {
+      console.error('Failed to refresh scores from backend:', error.message);
+      throw error;
+    }
+  }
+
+  async batchSaveResponses(responses) {
+    try {
+      const data = await this.makeRequest('/batch_save_responses', {
+        method: 'POST',
+        body: JSON.stringify({ responses })
+      });
+      return data;
+    } catch (error) {
+      console.error('Failed to batch save responses to backend:', error.message);
+      throw error;
+    }
   }
 }
 
-// Create and export a singleton instance
+// Create and export singleton instance
 const apiService = new ApiService();
-
-// Test connection on module load and run diagnostics if needed
-apiService.testConnection().catch(error => {
-  console.warn('Initial backend connection test failed:', error);
-});
-
 export default apiService;
 

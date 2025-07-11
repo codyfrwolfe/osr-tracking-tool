@@ -5,6 +5,7 @@ import { QUESTIONS, STORE_FOUNDATIONS } from '../data/osrData';
 import ErrorBoundary from './ErrorBoundary';
 import { CardSkeleton } from './LoadingSpinner';
 import apiService from '../utils/apiService';
+import { safeObjectKeys, safeObjectEntries } from '../utils/safeObjectUtils';
 
 const SectionSelection = ({ 
   store, 
@@ -21,7 +22,7 @@ const SectionSelection = ({
 
   // Transform flat responses into nested structure for scoring
   const transformedResponses = useMemo(() => {
-    return transformResponsesForScoring(responses);
+    return transformResponsesForScoring(responses || {});
   }, [responses]);
 
   // Load section progress from API on component mount and when responses change
@@ -30,8 +31,8 @@ const SectionSelection = ({
       try {
         const progressData = {};
         
-        // For each section, get the progress from the API or calculate it locally
-        for (const sectionKey of Object.keys(sections)) {
+        // FIXED: Use safe object keys to prevent null/undefined errors
+        for (const sectionKey of safeObjectKeys(sections || {})) {
           try {
             // Try to get from API first
             const result = await apiService.getSectionScore(store, sectionKey);
@@ -74,8 +75,8 @@ const SectionSelection = ({
     try {
       const progressData = {};
       
-      // For each section, get the progress from the API or calculate it locally
-      for (const sectionKey of Object.keys(sections)) {
+      // FIXED: Use safe object keys to prevent null/undefined errors
+      for (const sectionKey of safeObjectKeys(sections || {})) {
         try {
           // Force API refresh
           const result = await apiService.getSectionScore(store, sectionKey);
@@ -335,7 +336,7 @@ const SectionSelection = ({
 
         {/* Section Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {Object.entries(sections).map(([sectionKey, sectionInfo]) => {
+          {safeObjectEntries(sections || {}).map(([sectionKey, sectionInfo]) => {
             const completionStatus = getSectionCompletionStatus(sectionKey);
             const statusDisplay = getStatusDisplay(completionStatus.status, completionStatus.score);
             const StatusIcon = statusDisplay.icon;
