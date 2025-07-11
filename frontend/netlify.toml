@@ -3,7 +3,7 @@
   command = "npm run build"
 
 [build.environment]
-  NODE_VERSION = "18"
+  NODE_VERSION = "20"
 
 [[redirects]]
   from = "/*"
@@ -11,8 +11,8 @@
   status = 200
 
 [context.production.environment]
-  VITE_BACKEND_URL = "https://m448osrq2-production.up.railway.app"
+  VITE_BACKEND_URL = "osr-tracking-tool-production.up.railway.app"
 
 [context.deploy-preview.environment]
-  VITE_BACKEND_URL = "https://m448osrq2-production.up.railway.app"
+  VITE_BACKEND_URL = "osr-tracking-tool-production.up.railway.app"
 
