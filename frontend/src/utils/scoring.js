@@ -277,3 +277,83 @@ export const calculateStoreScore = (storeResponses, storeId) => {
   }
 };
 
+
+
+/**
+ * Calculate score for a single question
+ * @param {Object} question - Question object
+ * @param {Object} questionResponses - Responses for this question
+ * @returns {Object} Question score object
+ */
+export const calculateQuestionScore = (question, questionResponses) => {
+  try {
+    if (!question?.procedures) {
+      return {
+        score: 0,
+        maxPossibleScore: 0,
+        percentage: 0,
+        color: 'red',
+        completed: false
+      };
+    }
+
+    const actionableProcedures = question.procedures.filter(p => p?.type === 'actionable');
+    
+    if (actionableProcedures.length === 0) {
+      // Instructional-only questions are considered complete
+      return {
+        score: 0,
+        maxPossibleScore: 0,
+        percentage: 100,
+        color: 'green',
+        completed: true
+      };
+    }
+
+    let questionScore = 0;
+    let questionMaxScore = actionableProcedures.length * STANDARD_POINTS_PER_PROCEDURE;
+    let completedProcedures = 0;
+
+    actionableProcedures.forEach((procedure, index) => {
+      const procedureIndex = question.procedures.indexOf(procedure);
+      const response = questionResponses?.[procedureIndex];
+      
+      if (response && typeof response.hasIssues === 'string') {
+        completedProcedures++;
+        
+        // Award points based on response
+        if (response.hasIssues === 'no') {
+          questionScore += STANDARD_POINTS_PER_PROCEDURE;
+        } else if (response.hasIssues === 'yes') {
+          questionScore += 0; // No points for issues found
+        }
+      }
+    });
+
+    const completed = completedProcedures === actionableProcedures.length;
+    const percentage = questionMaxScore > 0 ? Math.round((questionScore / questionMaxScore) * 100) : 0;
+    
+    // Determine color based on percentage
+    let color = 'red';
+    if (percentage >= 80) color = 'green';
+    else if (percentage >= 60) color = 'yellow';
+
+    return {
+      score: questionScore,
+      maxPossibleScore: questionMaxScore,
+      percentage,
+      color,
+      completed
+    };
+  } catch (error) {
+    console.error('Error calculating question score:', error);
+    return {
+      score: 0,
+      maxPossibleScore: 0,
+      percentage: 0,
+      color: 'red',
+      completed: false
+    };
+  }
+};
+
