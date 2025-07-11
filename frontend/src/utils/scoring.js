@@ -15,6 +15,42 @@ const STANDARD_MAX_POINTS_PER_SECTION = {
 const STANDARD_TOTAL_MAX_POINTS = 46; // Sum of all section standard max points
 
 /**
+ * Safe Object.keys wrapper that handles null/undefined objects
+ * @param {*} obj - Object to get keys from
+ * @returns {Array} Array of keys or empty array if obj is null/undefined
+ */
+const safeObjectKeys = (obj) => {
+  if (!obj || typeof obj !== 'object') {
+    return [];
+  }
+  return Object.keys(obj);
+};
+
+/**
+ * Safe Object.values wrapper that handles null/undefined objects
+ * @param {*} obj - Object to get values from
+ * @returns {Array} Array of values or empty array if obj is null/undefined
+ */
+const safeObjectValues = (obj) => {
+  if (!obj || typeof obj !== 'object') {
+    return [];
+  }
+  return Object.values(obj);
+};
+
+/**
+ * Safe Object.entries wrapper that handles null/undefined objects
+ * @param {*} obj - Object to get entries from
+ * @returns {Array} Array of entries or empty array if obj is null/undefined
+ */
+const safeObjectEntries = (obj) => {
+  if (!obj || typeof obj !== 'object') {
+    return [];
+  }
+  return Object.entries(obj);
+};
+
+/**
  * Calculates the score for a single question based on responses
  * @param {Object} question - The question object with procedures and scoring criteria
  * @param {Object} responses - The responses object with procedure index as keys
@@ -189,8 +225,9 @@ export const calculateSectionScore = (sectionQuestions, sectionResponses, sectio
 
       const questionResponses = sectionResponses[question.id] || {};
       
-      // Only score questions that have responses
-      if (Object.keys(questionResponses).length > 0) {
+      // Only score questions that have responses - SAFE CHECK
+      const responseKeys = safeObjectKeys(questionResponses);
+      if (responseKeys.length > 0) {
         const questionScore = calculateQuestionScore(question, questionResponses);
         totalScore += questionScore.score;
         actualMaxPossibleScore += questionScore.maxPossibleScore;
@@ -286,13 +323,13 @@ export const calculateStoreScore = (storeId, allResponses, sections) => {
         details: 'No data available',
         percentage: 0,
         completedSections: 0,
-        totalSections: Object.keys(sections).length,
+        totalSections: sections ? safeObjectKeys(sections).length : 5,
         normalized: true
       };
     }
 
     const storeResponses = allResponses[storeId] || {};
-    const sectionKeys = Object.keys(sections);
+    const sectionKeys = safeObjectKeys(sections); // SAFE CHECK
     
     let totalScore = 0;
     let totalMaxPossibleScore = 0;
@@ -365,7 +402,7 @@ export const calculateStoreScore = (storeId, allResponses, sections) => {
       details: 'Error calculating score',
       percentage: 0,
       completedSections: 0,
-      totalSections: Object.keys(sections).length,
+      totalSections: sections ? safeObjectKeys(sections).length : 5, // SAFE CHECK
       normalized: true
     };
   }
@@ -379,7 +416,10 @@ export const calculateStoreScore = (storeId, allResponses, sections) => {
 export const transformResponsesForScoring = (flatResponses) => {
   const transformed = {};
   
-  Object.entries(flatResponses).forEach(([key, response]) => {
+  // SAFE CHECK for flatResponses
+  const responseEntries = safeObjectEntries(flatResponses);
+  
+  responseEntries.forEach(([key, response]) => {
     try {
       const parts = key.split('-');
       if (parts.length < 4) return;

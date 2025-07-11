@@ -1,7 +1,7 @@
 // Enhanced API Service for OSR Assessment Tool
 // Addresses root API issues and prevents page refresh
 
-const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || 'm448osrq2-production-4cce.up.railway.app';
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || 'https://osr-tracking-tool-production.up.railway.app';
 
 class ApiService {
   constructor() {
