@@ -280,6 +280,16 @@ class ApiService {
     return diagnostics;
   }
 
+  // Get current backend status
+  getBackendStatus() {
+    return {
+      isHealthy: this.isBackendHealthy,
+      lastCheck: this.lastHealthCheck,
+      baseUrl: this.baseURL,
+      status: this.isBackendHealthy ? 'connected' : 'disconnected'
+    };
+  }
+
   // API Methods
   async getStoreScore(storeId) {
     try {
