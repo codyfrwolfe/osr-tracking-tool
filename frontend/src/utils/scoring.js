@@ -155,6 +155,8 @@ export const calculateSectionScore = (sectionQuestions, sectionResponses, sectio
             questionScore += STANDARD_POINTS_PER_PROCEDURE;
           } else if (response.hasIssues === 'yes') {
             questionScore += 0; // No points for issues found
+          } else if (response.hasIssues === 'skip') {
+            questionScore += 0; // No points for skipped questions, but still counts as addressed
           }
         } else {
           questionCompleted = false;
@@ -326,6 +328,8 @@ export const calculateQuestionScore = (question, questionResponses) => {
           questionScore += STANDARD_POINTS_PER_PROCEDURE;
         } else if (response.hasIssues === 'yes') {
           questionScore += 0; // No points for issues found
+        } else if (response.hasIssues === 'skip') {
+          questionScore += 0; // No points for skipped questions, but still counts as addressed
         }
       }
     });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { ChevronRight, ChevronLeft, CheckCircle, AlertTriangle, Zap, Info, Home, List, Wifi, WifiOff, X, Check } from 'lucide-react';
 import { calculateQuestionScore } from '../utils/scoring';
 import ErrorBoundary from './ErrorBoundary';
@@ -194,8 +194,8 @@ const Assessment = ({
     return addNotification('warning', message, 5000);
   }, [addNotification]);
 
-  // FIXED: Handle procedure response without page refresh
-  const handleProcedureResponse = useCallback((questionId, procedureIndex, hasIssue, followUp = '') => {
+  // ENHANCED: Handle procedure response with Skip option support
+  const handleProcedureResponse = useCallback((questionId, procedureIndex, responseType, followUp = '') => {
     try {
       // Prevent any form submission or page refresh
       if (event) {
@@ -204,15 +204,21 @@ const Assessment = ({
       }
 
       // Validate inputs
-      if (!questionId || procedureIndex === undefined) {
-        console.error('Invalid question ID or procedure index');
+      if (!questionId || procedureIndex === undefined || !responseType) {
+        console.error('Invalid question ID, procedure index, or response type');
+        return;
+      }
+
+      // Validate responseType
+      if (!['yes', 'no', 'skip'].includes(responseType)) {
+        console.error('Invalid response type. Must be yes, no, or skip');
         return;
       }
 
       // FIXED: Use consistent response key format that includes store and section
       const responseKey = `${store}-${section}-${questionId}-${procedureIndex}`;
       const response = {
-        hasIssues: hasIssue ? 'yes' : 'no',
+        hasIssues: responseType, // 'yes', 'no', or 'skip'
         followUp: followUp.trim(),
         timestamp: new Date().toISOString(),
         version: '1.0'
@@ -756,7 +762,7 @@ const Assessment = ({
             <h4 className="font-semibold text-gray-900 mb-4">Procedures</h4>
             
             {currentQuestion.procedures?.map((procedure, procedureIndex) => {
-              const responseKey = `${currentQuestion.id}-${procedureIndex}`;
+              const responseKey = `${store}-${section}-${currentQuestion.id}-${procedureIndex}`;
               const response = responses[responseKey] || pendingResponses[responseKey];
               
               if (procedure.type === 'instructional') {
@@ -791,7 +797,7 @@ const Assessment = ({
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                handleProcedureResponse(currentQuestion.id, procedureIndex, true, response?.followUp || '');
+                                handleProcedureResponse(currentQuestion.id, procedureIndex, 'yes', response?.followUp || '');
                               }}
                               className={`px-4 py-2 rounded-lg border transition-all duration-200 ${
                                 response?.hasIssues === 'yes'
@@ -809,7 +815,7 @@ const Assessment = ({
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                handleProcedureResponse(currentQuestion.id, procedureIndex, false, '');
+                                handleProcedureResponse(currentQuestion.id, procedureIndex, 'no', '');
                               }}
                               className={`px-4 py-2 rounded-lg border transition-all duration-200 ${
                                 response?.hasIssues === 'no'
@@ -818,6 +824,25 @@ const Assessment = ({
                               }`}
                             >
                               No
+                            </button>
+                            
+                            <button
+                              type="button"
+                              id={`skip-${currentQuestion.id}-${procedureIndex}`}
+                              name={`response-${currentQuestion.id}-${procedureIndex}`}
+                              aria-describedby={`question-${currentQuestion.id}-${procedureIndex}`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleProcedureResponse(currentQuestion.id, procedureIndex, 'skip', '');
+                              }}
+                              className={`px-4 py-2 rounded-lg border transition-all duration-200 ${
+                                response?.hasIssues === 'skip'
+                                  ? 'bg-yellow-100 border-yellow-300 text-yellow-800'
+                                  : 'bg-white border-gray-300 text-gray-700 hover:bg-yellow-50'
+                              }`}
+                            >
+                              Skip
                             </button>
                           </div>
                         </div>
@@ -832,7 +857,7 @@ const Assessment = ({
                               id={`followup-${currentQuestion.id}-${procedureIndex}`}
                               name={`followup-${currentQuestion.id}-${procedureIndex}`}
                               value={response.followUp || ''}
-                              onChange={(e) => handleProcedureResponse(currentQuestion.id, procedureIndex, true, e.target.value)}
+                              onChange={(e) => handleProcedureResponse(currentQuestion.id, procedureIndex, 'yes', e.target.value)}
                               className="form-input"
                               placeholder="Enter details..."
                             />
