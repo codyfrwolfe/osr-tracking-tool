@@ -306,8 +306,8 @@ class ApiService {
       const data = await this.makeRequest('/save_response', {
         method: 'POST',
         body: JSON.stringify({
-          store_id: storeId,
-          section_id: sectionId,
+          store: storeId,
+          section: sectionId,
           question_id: questionId,
           procedure_index: procedureIndex,
           response: response
@@ -357,8 +357,8 @@ class ApiService {
       const data = await this.makeRequest('/batch_save_responses', {
         method: 'POST',
         body: JSON.stringify({ 
-          store_id: storeId,
-          section_id: sectionId,
+          store: storeId,
+          section: sectionId,
           responses: responses 
         })
       });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ChevronRight, ChevronLeft, CheckCircle, AlertTriangle, Zap, Info, Home, List, Wifi, WifiOff, X, Check } from 'lucide-react';
 import { calculateQuestionScore } from '../utils/scoring';
 import ErrorBoundary from './ErrorBoundary';
@@ -194,7 +194,7 @@ const Assessment = ({
     return addNotification('warning', message, 5000);
   }, [addNotification]);
 
-  // ENHANCED: Handle procedure response with Skip option support
+  // FIXED: Handle procedure response without page refresh - Updated for Skip functionality
   const handleProcedureResponse = useCallback((questionId, procedureIndex, responseType, followUp = '') => {
     try {
       // Prevent any form submission or page refresh
@@ -204,21 +204,21 @@ const Assessment = ({
       }
 
       // Validate inputs
-      if (!questionId || procedureIndex === undefined || !responseType) {
-        console.error('Invalid question ID, procedure index, or response type');
+      if (!questionId || procedureIndex === undefined) {
+        console.error('Invalid question ID or procedure index');
         return;
       }
 
-      // Validate responseType
+      // Validate response type
       if (!['yes', 'no', 'skip'].includes(responseType)) {
-        console.error('Invalid response type. Must be yes, no, or skip');
+        console.error('Invalid response type:', responseType);
         return;
       }
 
       // FIXED: Use consistent response key format that includes store and section
       const responseKey = `${store}-${section}-${questionId}-${procedureIndex}`;
       const response = {
-        hasIssues: responseType, // 'yes', 'no', or 'skip'
+        hasIssues: responseType,
         followUp: followUp.trim(),
         timestamp: new Date().toISOString(),
         version: '1.0'
@@ -762,7 +762,7 @@ const Assessment = ({
             <h4 className="font-semibold text-gray-900 mb-4">Procedures</h4>
             
             {currentQuestion.procedures?.map((procedure, procedureIndex) => {
-              const responseKey = `${store}-${section}-${currentQuestion.id}-${procedureIndex}`;
+              const responseKey = `${currentQuestion.id}-${procedureIndex}`;
               const response = responses[responseKey] || pendingResponses[responseKey];
               
               if (procedure.type === 'instructional') {
@@ -825,7 +825,6 @@ const Assessment = ({
                             >
                               No
                             </button>
-                            
                             <button
                               type="button"
                               id={`skip-${currentQuestion.id}-${procedureIndex}`}
