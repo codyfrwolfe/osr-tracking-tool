@@ -39,6 +39,36 @@ const Assessment = ({
     return currentQuestionIndex === questions.length - 1;
   }, [currentQuestionIndex, questions.length]);
 
+  // FIXED: Helper function to get response with multiple key format support
+  const getResponseForProcedure = useCallback((questionId, procedureIndex) => {
+    // Primary key format: store-section-questionId-procedureIndex
+    const primaryKey = `${store}-${section}-${questionId}-${procedureIndex}`;
+    
+    // Alternative key formats that might exist in the API response
+    const alternativeKeys = [
+      `${questionId}-${procedureIndex}`, // Legacy format without store/section
+      `${questionId}-${procedureIndex + 1}`, // 1-based indexing
+      `${store}-${section}-${questionId}-${procedureIndex + 1}`, // 1-based with store/section
+    ];
+    
+    // Check primary key first
+    let response = responses[primaryKey] || pendingResponses[primaryKey];
+    if (response) {
+      return response;
+    }
+    
+    // Check alternative key formats
+    for (const altKey of alternativeKeys) {
+      response = responses[altKey] || pendingResponses[altKey];
+      if (response) {
+        console.log(`Found response using alternative key format: ${altKey} for ${primaryKey}`);
+        return response;
+      }
+    }
+    
+    return null;
+  }, [store, section, responses, pendingResponses]);
+
   // Update backend status
   useEffect(() => {
     const updateBackendStatus = () => {
@@ -51,7 +81,7 @@ const Assessment = ({
     return () => clearInterval(interval);
   }, []);
 
-  // FIXED: Load responses with better error handling
+  // FIXED: Load responses with better error handling and key format normalization
   useEffect(() => {
     const loadResponses = async () => {
       try {
@@ -69,9 +99,18 @@ const Assessment = ({
         try {
           const apiResult = await apiService.getResponses(store, section);
           if (apiResult.success && apiResult.responses) {
-            // Convert API responses to local format
+            // Convert API responses to local format and normalize keys
             for (const [responseKey, response] of Object.entries(apiResult.responses)) {
+              // Store the response with its original key
               loadedResponses[responseKey] = response;
+              
+              // FIXED: Also create normalized keys for consistent lookup
+              // If the key doesn't include store-section prefix, create a normalized version
+              if (!responseKey.includes(`${store}-${section}-`)) {
+                const normalizedKey = `${store}-${section}-${responseKey}`;
+                loadedResponses[normalizedKey] = response;
+                console.log(`Normalized key: ${responseKey} -> ${normalizedKey}`);
+              }
             }
             console.log('Loaded responses from API:', loadedResponses);
           }
@@ -130,9 +169,8 @@ const Assessment = ({
         
         question.procedures.forEach((procedure, procedureIndex) => {
           if (procedure?.type === 'actionable') {
-            // FIXED: Use consistent response key format that includes store and section
-            const responseKey = `${store}-${section}-${question.id}-${procedureIndex}`;
-            const response = responses[responseKey] || pendingResponses[responseKey];
+            // FIXED: Use the helper function to get response with multiple key format support
+            const response = getResponseForProcedure(question.id, procedureIndex);
             if (response) {
               questionResponses[procedureIndex.toString()] = response;
             }
@@ -151,7 +189,7 @@ const Assessment = ({
     } catch (error) {
       console.error('Error calculating scores:', error);
     }
-  }, [responses, pendingResponses, questions, store, section]);
+  }, [responses, pendingResponses, questions, getResponseForProcedure]);
 
   useEffect(() => {
     calculateScores();
@@ -358,12 +396,11 @@ const Assessment = ({
     
     return actionableProcedures.every((procedure, index) => {
       const procedureIndex = question.procedures.indexOf(procedure);
-      // FIXED: Use consistent response key format that includes store and section
-      const responseKey = `${store}-${section}-${question.id}-${procedureIndex}`;
-      const response = responses[responseKey] || pendingResponses[responseKey];
+      // FIXED: Use the helper function to get response with multiple key format support
+      const response = getResponseForProcedure(question.id, procedureIndex);
       return response && typeof response.hasIssues === 'string';
     });
-  }, [responses, pendingResponses, store, section]);
+  }, [getResponseForProcedure]);
 
   // Navigation handlers with validation
   const canProceedToNext = useCallback(() => {
@@ -770,8 +807,8 @@ const Assessment = ({
             <h4 className="font-semibold text-gray-900 mb-4">Procedures</h4>
             
             {currentQuestion.procedures?.map((procedure, procedureIndex) => {
-              const responseKey = `${store}-${section}-${currentQuestion.id}-${procedureIndex}`;
-              const response = responses[responseKey] || pendingResponses[responseKey];
+              // FIXED: Use the helper function to get response with multiple key format support
+              const response = getResponseForProcedure(currentQuestion.id, procedureIndex);
               
               if (procedure.type === 'instructional') {
                 return (
