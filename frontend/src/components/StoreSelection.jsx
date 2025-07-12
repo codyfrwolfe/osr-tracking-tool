@@ -20,6 +20,41 @@ const StoreSelection = ({
     setLocalProgress(storeProgress || {});
   }, [storeProgress]);
 
+  // ENHANCED: Listen for score update events from other components
+  useEffect(() => {
+    const handleScoreUpdate = (event) => {
+      const { storeId } = event.detail;
+      
+      console.log(`Received score update event for store ${storeId}, refreshing store progress...`);
+      
+      // Refresh the specific store's progress
+      const refreshStoreProgress = async () => {
+        try {
+          const result = await apiService.getStoreScore(storeId);
+          if (result.success && result.score) {
+            setLocalProgress(prev => ({
+              ...prev,
+              [storeId]: result.score
+            }));
+            console.log(`Refreshed store ${storeId} progress from score update event:`, result.score);
+          }
+        } catch (error) {
+          console.warn(`Failed to refresh progress for store ${storeId}:`, error);
+        }
+      };
+      
+      refreshStoreProgress();
+    };
+
+    // Add event listener
+    window.addEventListener('scoreUpdated', handleScoreUpdate);
+    
+    // Cleanup
+    return () => {
+      window.removeEventListener('scoreUpdated', handleScoreUpdate);
+    };
+  }, []);
+
   const handleRefresh = async () => {
     setRefreshing(true);
     

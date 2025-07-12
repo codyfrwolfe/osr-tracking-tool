@@ -69,6 +69,52 @@ const SectionSelection = ({
     loadSectionProgress();
   }, [store, sections, transformedResponses]);
 
+  // ENHANCED: Listen for score update events from other components
+  useEffect(() => {
+    const handleScoreUpdate = (event) => {
+      const { storeId } = event.detail;
+      
+      // Only refresh if this is the current store
+      if (storeId === store) {
+        console.log(`Received score update event for store ${storeId}, refreshing section scores...`);
+        
+        // Refresh section progress
+        const refreshSectionProgress = async () => {
+          try {
+            const progressData = {};
+            
+            for (const sectionKey of safeObjectKeys(sections || {})) {
+              try {
+                const result = await apiService.getSectionScore(store, sectionKey);
+                
+                if (result.success && result.score) {
+                  progressData[sectionKey] = result.score;
+                }
+              } catch (error) {
+                console.warn(`Failed to refresh progress for section ${sectionKey}:`, error);
+              }
+            }
+            
+            setLocalProgress(prev => ({ ...prev, ...progressData }));
+            console.log('Refreshed section progress from score update event:', progressData);
+          } catch (error) {
+            console.error('Error refreshing section progress:', error);
+          }
+        };
+        
+        refreshSectionProgress();
+      }
+    };
+
+    // Add event listener
+    window.addEventListener('scoreUpdated', handleScoreUpdate);
+    
+    // Cleanup
+    return () => {
+      window.removeEventListener('scoreUpdated', handleScoreUpdate);
+    };
+  }, [store, sections]);
+
   // Handle refresh button click
   const handleRefresh = async () => {
     setRefreshing(true);

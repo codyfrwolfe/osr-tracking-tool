@@ -352,11 +352,15 @@ class ApiService {
     }
   }
 
-  async batchSaveResponses(responses) {
+  async batchSaveResponses(storeId, sectionId, responses) {
     try {
       const data = await this.makeRequest('/batch_save_responses', {
         method: 'POST',
-        body: JSON.stringify({ responses })
+        body: JSON.stringify({ 
+          store_id: storeId,
+          section_id: sectionId,
+          responses: responses 
+        })
       });
       return data;
     } catch (error) {

@@ -162,7 +162,8 @@ function AppContent() {
 
   const handleSaveResponse = async (store, section, questionId, procedureIndex, response) => {
     try {
-      const responseKey = `${questionId}-${procedureIndex}`;
+      // FIXED: Use consistent response key format that includes store and section
+      const responseKey = `${store}-${section}-${questionId}-${procedureIndex}`;
       
       // Update local state immediately
       setResponses(prev => ({
@@ -188,7 +189,8 @@ function AppContent() {
   };
 
   const handleGetResponse = (store, section, questionId, procedureIndex) => {
-    const responseKey = `${questionId}-${procedureIndex}`;
+    // FIXED: Use consistent response key format that includes store and section
+    const responseKey = `${store}-${section}-${questionId}-${procedureIndex}`;
     return responses[responseKey] || null;
   };
 
@@ -196,24 +198,41 @@ function AppContent() {
     navigate('/');
   };
 
-  const handleRefreshProgress = async () => {
-    // Refresh progress for current store only to avoid excessive API calls
+  const handleRefreshProgress = async (specificStoreId = null) => {
+    // Enhanced refresh that updates both store and section scores
     const currentPath = window.location.pathname;
     const pathParts = currentPath.split('/');
     
-    if (pathParts.length >= 3 && pathParts[1] === 'assessment') {
-      const currentStore = pathParts[2];
-      
+    // Determine which store to refresh
+    let storeToRefresh = specificStoreId;
+    if (!storeToRefresh && pathParts.length >= 3) {
+      if (pathParts[1] === 'assessment' || pathParts[1] === 'sections') {
+        storeToRefresh = pathParts[2];
+      }
+    }
+    
+    if (storeToRefresh) {
       try {
-        const result = await apiService.getStoreScore(currentStore);
-        if (result.success && result.score) {
+        // Refresh store-level score
+        const storeResult = await apiService.getStoreScore(storeToRefresh);
+        if (storeResult.success && storeResult.score) {
           setStoreProgress(prev => ({
             ...prev,
-            [currentStore]: result.score
+            [storeToRefresh]: storeResult.score
           }));
+          console.log(`Refreshed store ${storeToRefresh} progress:`, storeResult.score);
         }
+        
+        // Also trigger a custom event that SectionSelection can listen to
+        window.dispatchEvent(new CustomEvent('scoreUpdated', { 
+          detail: { 
+            storeId: storeToRefresh,
+            timestamp: Date.now()
+          } 
+        }));
+        
       } catch (error) {
-        console.warn(`Failed to refresh progress for store ${currentStore}:`, error);
+        console.warn(`Failed to refresh progress for store ${storeToRefresh}:`, error);
       }
     }
   };

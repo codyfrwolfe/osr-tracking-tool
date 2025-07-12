@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { ChevronRight, ChevronLeft, CheckCircle, AlertTriangle, Zap, Info, Home, List, Wifi, WifiOff } from 'lucide-react';
+import { ChevronRight, ChevronLeft, CheckCircle, AlertTriangle, Zap, Info, Home, List, Wifi, WifiOff, X, Check } from 'lucide-react';
 import { calculateQuestionScore } from '../utils/scoring';
 import ErrorBoundary from './ErrorBoundary';
 import LoadingSpinner from './LoadingSpinner';
@@ -25,6 +25,10 @@ const Assessment = ({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(null);
   const [backendStatus, setBackendStatus] = useState({ isHealthy: false });
+  
+  // ENHANCED: Add notification states for better user feedback
+  const [notifications, setNotifications] = useState([]);
+  const [scoreUpdateStatus, setScoreUpdateStatus] = useState(null); // 'success', 'error', 'loading'
 
   // Memoize current question to prevent unnecessary re-renders
   const currentQuestion = useMemo(() => {
@@ -80,7 +84,8 @@ const Assessment = ({
           if (!question?.procedures) continue;
           
           for (let procedureIndex = 0; procedureIndex < question.procedures.length; procedureIndex++) {
-            const responseKey = `${question.id}-${procedureIndex}`;
+            // FIXED: Use consistent response key format that includes store and section
+            const responseKey = `${store}-${section}-${question.id}-${procedureIndex}`;
             
             // Skip if already loaded from API
             if (loadedResponses[responseKey]) continue;
@@ -131,7 +136,8 @@ const Assessment = ({
         
         question.procedures.forEach((procedure, procedureIndex) => {
           if (procedure?.type === 'actionable') {
-            const responseKey = `${question.id}-${procedureIndex}`;
+            // FIXED: Use consistent response key format that includes store and section
+            const responseKey = `${store}-${section}-${question.id}-${procedureIndex}`;
             const response = responses[responseKey] || pendingResponses[responseKey];
             if (response) {
               questionResponses[procedureIndex.toString()] = response;
@@ -151,11 +157,42 @@ const Assessment = ({
     } catch (error) {
       console.error('Error calculating scores:', error);
     }
-  }, [responses, pendingResponses, questions]);
+  }, [responses, pendingResponses, questions, store, section]);
 
   useEffect(() => {
     calculateScores();
   }, [calculateScores]);
+
+  // ENHANCED: Notification utility functions for better user feedback
+  const addNotification = useCallback((type, message, duration = 5000) => {
+    const id = Date.now() + Math.random();
+    const notification = { id, type, message, timestamp: Date.now() };
+    
+    setNotifications(prev => [...prev, notification]);
+    
+    // Auto-remove notification after duration
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, duration);
+    
+    return id;
+  }, []);
+
+  const removeNotification = useCallback((id) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  }, []);
+
+  const showSuccessNotification = useCallback((message) => {
+    return addNotification('success', message, 3000);
+  }, [addNotification]);
+
+  const showErrorNotification = useCallback((message) => {
+    return addNotification('error', message, 7000);
+  }, [addNotification]);
+
+  const showWarningNotification = useCallback((message) => {
+    return addNotification('warning', message, 5000);
+  }, [addNotification]);
 
   // FIXED: Handle procedure response without page refresh
   const handleProcedureResponse = useCallback((questionId, procedureIndex, hasIssue, followUp = '') => {
@@ -172,7 +209,8 @@ const Assessment = ({
         return;
       }
 
-      const responseKey = `${questionId}-${procedureIndex}`;
+      // FIXED: Use consistent response key format that includes store and section
+      const responseKey = `${store}-${section}-${questionId}-${procedureIndex}`;
       const response = {
         hasIssues: hasIssue ? 'yes' : 'no',
         followUp: followUp.trim(),
@@ -216,12 +254,13 @@ const Assessment = ({
     }
   }, [store, section, onSaveResponse]);
 
-  // FIXED: Batch save pending responses with progress refresh
+  // ENHANCED: Batch save pending responses with comprehensive error handling and user feedback
   const savePendingResponses = useCallback(async () => {
     if (Object.keys(pendingResponses).length === 0) return;
 
     try {
       setIsSaving(true);
+      setScoreUpdateStatus('loading');
       
       // Try batch save first
       const batchResult = await apiService.batchSaveResponses(store, section, pendingResponses);
@@ -230,26 +269,72 @@ const Assessment = ({
         console.log('Batch save successful');
         setPendingResponses({}); // Clear pending responses
         
-        // Refresh scores after saving
+        // ENHANCED: Comprehensive score refresh with error handling
         try {
+          // First refresh the backend scores
           await apiService.refreshScores(store, section);
           
-          // FIXED: Refresh store progress only after successful batch save
+          // Then refresh the frontend progress with the specific store ID
           if (onRefreshProgress) {
-            onRefreshProgress(store);
+            await onRefreshProgress(store);
           }
-        } catch (error) {
-          console.warn('Failed to refresh scores:', error);
+          
+          // Also trigger immediate local score recalculation
+          calculateScores();
+          
+          console.log('Successfully refreshed scores after batch save');
+          setScoreUpdateStatus('success');
+          showSuccessNotification('Responses saved and scores updated successfully!');
+          
+        } catch (scoreError) {
+          console.warn('Failed to refresh scores after batch save:', scoreError);
+          setScoreUpdateStatus('error');
+          showWarningNotification('Responses saved, but score update failed. Please refresh manually.');
+          
+          // FALLBACK: Try local score calculation as backup
+          try {
+            calculateScores();
+            showWarningNotification('Using local score calculation as fallback.');
+          } catch (fallbackError) {
+            console.error('Fallback score calculation failed:', fallbackError);
+            showErrorNotification('Score calculation failed. Please refresh the page.');
+          }
         }
       } else {
         console.warn('Batch save failed, responses saved locally');
+        setScoreUpdateStatus('error');
+        showWarningNotification('API save failed, but responses are saved locally. Scores may not update immediately.');
+        
+        // FALLBACK: Still try to calculate scores locally
+        try {
+          calculateScores();
+        } catch (error) {
+          console.error('Local score calculation failed:', error);
+        }
       }
     } catch (error) {
       console.error('Error saving pending responses:', error);
+      setScoreUpdateStatus('error');
+      showErrorNotification('Failed to save responses. Please check your connection and try again.');
+      
+      // FALLBACK: Try to save to localStorage at least
+      try {
+        Object.entries(pendingResponses).forEach(([responseKey, response]) => {
+          const [, , questionId, procedureIndex] = responseKey.split('-');
+          const storageKey = `osr_response_${store}_${section}_${questionId}_${procedureIndex}`;
+          localStorage.setItem(storageKey, JSON.stringify(response));
+        });
+        showWarningNotification('Responses saved locally as backup.');
+      } catch (storageError) {
+        console.error('Failed to save to localStorage:', storageError);
+        showErrorNotification('Critical error: Unable to save responses anywhere. Please try again.');
+      }
     } finally {
       setIsSaving(false);
+      // Clear status after a delay
+      setTimeout(() => setScoreUpdateStatus(null), 3000);
     }
-  }, [store, section, pendingResponses, onRefreshProgress]);
+  }, [store, section, pendingResponses, onRefreshProgress, calculateScores, showSuccessNotification, showWarningNotification, showErrorNotification]);
 
   // Check if question is complete
   const isQuestionComplete = useCallback((question) => {
@@ -259,10 +344,12 @@ const Assessment = ({
     
     return actionableProcedures.every((procedure, index) => {
       const procedureIndex = question.procedures.indexOf(procedure);
-      const response = responses[`${question.id}-${procedureIndex}`] || pendingResponses[`${question.id}-${procedureIndex}`];
+      // FIXED: Use consistent response key format that includes store and section
+      const responseKey = `${store}-${section}-${question.id}-${procedureIndex}`;
+      const response = responses[responseKey] || pendingResponses[responseKey];
       return response && typeof response.hasIssues === 'string';
     });
-  }, [responses, pendingResponses]);
+  }, [responses, pendingResponses, store, section]);
 
   // Navigation handlers with validation
   const canProceedToNext = useCallback(() => {
@@ -327,34 +414,66 @@ const Assessment = ({
     }
   }, [canFinishSection, savePendingResponses, onFinish]);
 
-  // Navigation handlers
-  const handleNavigateToSections = useCallback((e) => {
+  // ENHANCED: Navigation handlers with comprehensive error handling
+  const handleNavigateToSections = useCallback(async (e) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
     
-    // Save pending responses before navigation
-    savePendingResponses();
-    
-    if (onNavigateToSections) {
-      onNavigateToSections();
+    try {
+      // Save pending responses before navigation
+      await savePendingResponses();
+      
+      // ENHANCED: Trigger score refresh before navigation with error handling
+      if (onRefreshProgress) {
+        try {
+          await onRefreshProgress(store);
+          console.log('Triggered score refresh before navigating to sections');
+        } catch (error) {
+          console.warn('Failed to refresh scores before navigation:', error);
+          showWarningNotification('Score refresh failed, but navigation will continue.');
+        }
+      }
+      
+      if (onNavigateToSections) {
+        onNavigateToSections();
+      }
+    } catch (error) {
+      console.error('Error during navigation to sections:', error);
+      showErrorNotification('Failed to save responses before navigation. Please try again.');
     }
-  }, [onNavigateToSections, savePendingResponses]);
+  }, [onNavigateToSections, savePendingResponses, onRefreshProgress, store, showWarningNotification, showErrorNotification]);
 
-  const handleNavigateToStores = useCallback((e) => {
+  const handleNavigateToStores = useCallback(async (e) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
     
-    // Save pending responses before navigation
-    savePendingResponses();
-    
-    if (onNavigateToStores) {
-      onNavigateToStores();
+    try {
+      // Save pending responses before navigation
+      await savePendingResponses();
+      
+      // ENHANCED: Trigger score refresh before navigation with error handling
+      if (onRefreshProgress) {
+        try {
+          await onRefreshProgress(store);
+          console.log('Triggered score refresh before navigating to stores');
+        } catch (error) {
+          console.warn('Failed to refresh scores before navigation:', error);
+          showWarningNotification('Score refresh failed, but navigation will continue.');
+        }
+      }
+      
+      if (onNavigateToStores) {
+        onNavigateToStores();
+      }
+    } catch (error) {
+      console.error('Error during navigation to stores:', error);
+      showErrorNotification('Failed to save responses before navigation. Please try again.');
     }
-  }, [onNavigateToStores, savePendingResponses]);
+  }, [onNavigateToStores, savePendingResponses, onRefreshProgress, store, showWarningNotification, showErrorNotification]);
 
   // Utility functions for UI
   const getQuestionTypeLabel = useCallback((questionId) => {
@@ -455,6 +574,64 @@ const Assessment = ({
   return (
     <ErrorBoundary>
       <div className="fade-in max-w-4xl mx-auto space-y-6">
+        {/* ENHANCED: Notification System */}
+        {notifications.length > 0 && (
+          <div className="fixed top-4 right-4 z-50 space-y-2">
+            {notifications.map((notification) => (
+              <div
+                key={notification.id}
+                className={`flex items-center justify-between p-4 rounded-lg shadow-lg border max-w-md transition-all duration-300 ${
+                  notification.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' :
+                  notification.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' :
+                  notification.type === 'warning' ? 'bg-yellow-50 border-yellow-200 text-yellow-800' :
+                  'bg-blue-50 border-blue-200 text-blue-800'
+                }`}
+              >
+                <div className="flex items-center space-x-3">
+                  {notification.type === 'success' && <Check className="h-5 w-5 text-green-600" />}
+                  {notification.type === 'error' && <AlertTriangle className="h-5 w-5 text-red-600" />}
+                  {notification.type === 'warning' && <AlertTriangle className="h-5 w-5 text-yellow-600" />}
+                  {notification.type === 'info' && <Info className="h-5 w-5 text-blue-600" />}
+                  <span className="text-sm font-medium">{notification.message}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeNotification(notification.id)}
+                  className="ml-3 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Score Update Status Indicator */}
+        {scoreUpdateStatus && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+            <div className="flex items-center justify-center space-x-3">
+              {scoreUpdateStatus === 'loading' && (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                  <span className="text-sm text-blue-600">Updating scores...</span>
+                </>
+              )}
+              {scoreUpdateStatus === 'success' && (
+                <>
+                  <Check className="h-5 w-5 text-green-600" />
+                  <span className="text-sm text-green-600">Scores updated successfully!</span>
+                </>
+              )}
+              {scoreUpdateStatus === 'error' && (
+                <>
+                  <AlertTriangle className="h-5 w-5 text-red-600" />
+                  <span className="text-sm text-red-600">Score update failed - using fallback</span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Navigation Header */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
           <div className="flex items-center justify-between">
