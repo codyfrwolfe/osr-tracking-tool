@@ -762,7 +762,7 @@ const Assessment = ({
             <h4 className="font-semibold text-gray-900 mb-4">Procedures</h4>
             
             {currentQuestion.procedures?.map((procedure, procedureIndex) => {
-              const responseKey = `${currentQuestion.id}-${procedureIndex}`;
+              const responseKey = `${store}-${section}-${currentQuestion.id}-${procedureIndex}`;
               const response = responses[responseKey] || pendingResponses[responseKey];
               
               if (procedure.type === 'instructional') {
