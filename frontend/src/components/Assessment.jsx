@@ -87,21 +87,15 @@ const Assessment = ({
             // FIXED: Use consistent response key format that includes store and section
             const responseKey = `${store}-${section}-${question.id}-${procedureIndex}`;
             
-            // Skip if already loaded from API
+            // Skip if already loaded from API - BACKEND IS SOURCE OF TRUTH
             if (loadedResponses[responseKey]) continue;
             
+            // REMOVED: localStorage fallback to prevent cross-device sync issues
+            // Only use prop-based response as final fallback
             try {
-              // Try localStorage
-              const storageKey = `osr_response_${store}_${section}_${question.id}_${procedureIndex}`;
-              const storedResponse = localStorage.getItem(storageKey);
-              if (storedResponse) {
-                loadedResponses[responseKey] = JSON.parse(storedResponse);
-              } else {
-                // Fallback to prop-based response
-                const response = onGetResponse?.(store, section, question.id, procedureIndex);
-                if (response) {
-                  loadedResponses[responseKey] = response;
-                }
+              const response = onGetResponse?.(store, section, question.id, procedureIndex);
+              if (response) {
+                loadedResponses[responseKey] = response;
               }
             } catch (error) {
               console.warn(`Error loading response for ${question.id}-${procedureIndex}:`, error);
@@ -236,13 +230,14 @@ const Assessment = ({
         [responseKey]: response
       }));
       
-      // Save to localStorage immediately as backup
+      // Save to localStorage ONLY as temporary backup for pending responses
+      // This will be cleared after successful backend sync
       try {
-        const storageKey = `osr_response_${store}_${section}_${questionId}_${procedureIndex}`;
-        localStorage.setItem(storageKey, JSON.stringify(response));
-        console.log(`Saved to localStorage: ${storageKey}`);
+        const pendingKey = `osr_pending_${store}_${section}_${questionId}_${procedureIndex}`;
+        localStorage.setItem(pendingKey, JSON.stringify(response));
+        console.log(`Saved to localStorage as pending: ${pendingKey}`);
       } catch (storageError) {
-        console.error('Error saving to localStorage:', storageError);
+        console.error('Error saving pending response to localStorage:', storageError);
       }
       
       // Also call the prop-based save function for compatibility
@@ -273,6 +268,19 @@ const Assessment = ({
       
       if (batchResult.success) {
         console.log('Batch save successful');
+        
+        // Clear pending localStorage items after successful backend sync
+        try {
+          Object.keys(pendingResponses).forEach(responseKey => {
+            const [, , questionId, procedureIndex] = responseKey.split('-');
+            const pendingKey = `osr_pending_${store}_${section}_${questionId}_${procedureIndex}`;
+            localStorage.removeItem(pendingKey);
+            console.log(`Cleared pending localStorage: ${pendingKey}`);
+          });
+        } catch (cleanupError) {
+          console.warn('Error cleaning up pending localStorage:', cleanupError);
+        }
+        
         setPendingResponses({}); // Clear pending responses
         
         // ENHANCED: Comprehensive score refresh with error handling

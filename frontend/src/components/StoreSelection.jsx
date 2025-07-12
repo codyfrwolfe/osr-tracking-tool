@@ -20,6 +20,34 @@ const StoreSelection = ({
     setLocalProgress(storeProgress || {});
   }, [storeProgress]);
 
+  // ADDED: Automatically load scores from backend on component mount
+  useEffect(() => {
+    const loadStoreScores = async () => {
+      if (!stores || stores.length === 0) return;
+      
+      console.log('Loading store scores from backend...');
+      const progressData = {};
+      
+      for (const storeId of stores) {
+        try {
+          const result = await apiService.getStoreScore(storeId);
+          if (result.success && result.score) {
+            progressData[storeId] = result.score;
+          }
+        } catch (error) {
+          console.warn(`Failed to load score for store ${storeId}:`, error);
+        }
+      }
+      
+      if (Object.keys(progressData).length > 0) {
+        setLocalProgress(prev => ({ ...prev, ...progressData }));
+        console.log('Loaded store scores from backend:', progressData);
+      }
+    };
+    
+    loadStoreScores();
+  }, [stores]); // Run when stores list changes
+
   // ENHANCED: Listen for score update events from other components
   useEffect(() => {
     const handleScoreUpdate = (event) => {
